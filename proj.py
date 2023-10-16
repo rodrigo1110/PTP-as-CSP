@@ -56,8 +56,10 @@ def initialize_locations(input_data, ptpInstance):
 
 def initialize_vehicles(input_data, ptpInstance):
     veh_ids, veh_canTakes, veh_starts, veh_ends, veh_capacities, veh_availabilities_start, veh_availabilities_end = [], [], [], [], [], [], []
-    canTakeMax, availabilitiesMax = 0, 0
+    canTakeMax, availabilitiesMax, i = 0, 0, 0
     for vehicle in input_data['vehicles']:
+        veh_availabilities_start.append([])
+        veh_availabilities_end.append([])
         veh_ids.append(vehicle['id'])
         if(canTakeMax < len(vehicle['canTake'])):
             canTakeMax = len(vehicle['canTake'])
@@ -69,9 +71,14 @@ def initialize_vehicles(input_data, ptpInstance):
             availabilitiesMax = len(vehicle['availability'])
         for availability_interval in vehicle['availability']:
             interval_elements = availability_interval.split(':')
-            veh_availabilities_start.append(convert_str_to_mins(interval_elements[0]))
-            veh_availabilities_end.append(convert_str_to_mins(interval_elements[1]))
-    
+            veh_availabilities_start[i].append(convert_str_to_mins(interval_elements[0]))
+            veh_availabilities_end[i].append(convert_str_to_mins(interval_elements[1]))
+        i = i + 1
+    for i in range(len(veh_availabilities_start)):
+        while len(veh_availabilities_start[i]) != availabilitiesMax:
+            veh_availabilities_start[i].append(-1)
+            veh_availabilities_end[i].append(-1)
+
     ptpInstance['vehicle_id'] = veh_ids
     ptpInstance['num_canTake'] = canTakeMax
     ptpInstance['vehicle_canTake'] = veh_canTakes
