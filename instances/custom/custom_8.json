@@ -1,0 +1,91 @@
+{
+  "description": "2 patients 1 vehicle different hospitals",
+  "sameVehicleBackward": false,
+  "maxWaitTime": "00h30",
+  "places": [{
+    "id": 0,
+    "category": 0
+  }, {
+    "id": 1,
+    "category": 0
+  }, {
+    "id": 2,
+    "category": 1
+  }, {
+    "id": 3,
+    "category": 2
+  }, {
+    "id": 4,
+    "category": 2
+  }],
+  "vehicles": [{
+    "id": 5,
+    "canTake": [
+      0
+    ],
+    "start": 2,
+    "end": 2,
+    "capacity": 6,
+    "availability": [
+      "07h00:20h00"
+    ]
+  }],
+  "patients": [{
+    "id": 6,
+    "category": 0,
+    "load": 1,
+    "start": 3,
+    "destination": 0,
+    "end": 3,
+    "rdvTime": "10h00",
+    "rdvDuration": "00h30",
+    "srvDuration": "00h01"
+  }, {
+    "id": 7,
+    "category": 0,
+    "load": 1,
+    "start": 4,
+    "destination": 1,
+    "end": 4,
+    "rdvTime": "10h15",
+    "rdvDuration": "00h30",
+    "srvDuration": "00h01"
+  }],
+  "distMatrix": [
+    [
+      0,
+      5,
+      5,
+      5,
+      5
+    ],
+    [
+      5,
+      0,
+      5,
+      5,
+      5
+    ],
+    [
+      5,
+      5,
+      0,
+      5,
+      5
+    ],
+    [
+      5,
+      5,
+      5,
+      0,
+      5
+    ],
+    [
+      5,
+      5,
+      5,
+      5,
+      0
+    ]
+  ]
+}

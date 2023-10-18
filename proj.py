@@ -61,31 +61,35 @@ def initialize_vehicles(input_data, ptpInstance):
         veh_availabilities_start.append([])
         veh_availabilities_end.append([])
         veh_ids.append(vehicle['id'])
-        if(canTakeMax < len(vehicle['canTake'])):
-            canTakeMax = len(vehicle['canTake'])
+        #if(canTakeMax < len(vehicle['canTake'])): (cheat - assume max n of categories is 3)
+        #    canTakeMax = len(vehicle['canTake']) 
         veh_canTakes.append(vehicle['canTake']) #might need to add -1s for all sublists to have same size
         veh_starts.append((vehicle['start']))
         veh_ends.append((vehicle['end']))
         veh_capacities.append(vehicle['capacity'])
-        if(availabilitiesMax < len(vehicle['availability'])):
-            availabilitiesMax = len(vehicle['availability'])
+        #if(availabilitiesMax < len(vehicle['availability'])): (cheat - assume max availability intervals = 2)
+        #    availabilitiesMax = len(vehicle['availability'])
         for availability_interval in vehicle['availability']:
             interval_elements = availability_interval.split(':')
             veh_availabilities_start[i].append(convert_str_to_mins(interval_elements[0]))
             veh_availabilities_end[i].append(convert_str_to_mins(interval_elements[1]))
         i = i + 1
-    for i in range(len(veh_availabilities_start)):
-        while len(veh_availabilities_start[i]) != availabilitiesMax:
-            veh_availabilities_start[i].append(-1)
-            veh_availabilities_end[i].append(-1)
+    for j in range(len(veh_canTakes)):
+        while len(veh_canTakes[j]) != 3: #canTakeMax:
+            veh_canTakes[j].append(-1)
+            
+    for k in range(len(veh_availabilities_start)):
+        while len(veh_availabilities_start[k]) != 2: #availabilitiesMax:
+            veh_availabilities_start[k].append(-1)
+            veh_availabilities_end[k].append(-1)
 
     ptpInstance['vehicle_id'] = veh_ids
-    ptpInstance['num_canTake'] = canTakeMax
+    ptpInstance['num_canTake'] = 3 #canTakeMax
     ptpInstance['vehicle_canTake'] = veh_canTakes
     ptpInstance['vehicle_start_location'] = veh_starts
     ptpInstance['vehicle_end_location'] = veh_ends
     ptpInstance['vehicle_capacity'] = veh_capacities
-    ptpInstance['num_availability'] = availabilitiesMax
+    ptpInstance['num_availability'] = 2 #availabilitiesMax
     ptpInstance['vehicle_availability_start'] = veh_availabilities_start
     ptpInstance['vehicle_availability_end'] = veh_availabilities_end
 

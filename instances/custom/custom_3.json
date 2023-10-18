@@ -1,0 +1,66 @@
+{
+  "description": "simple test 1 patient 2 vehicles",
+  "sameVehicleBackward": false,
+  "maxWaitTime": "00h30",
+  "places": [{
+    "id": 0,
+    "category": 0
+  }, {
+    "id": 1,
+    "category": 1
+  }, {
+    "id": 2,
+    "category": 2
+  }],
+  "vehicles": [{
+    "id": 3,
+    "canTake": [
+      0
+    ],
+    "start": 1,
+    "end": 1,
+    "capacity": 6,
+    "availability": [
+      "07h00:20h00"
+    ]
+  }, {
+    "id": 4,
+    "canTake": [
+      1
+    ],
+    "start": 1,
+    "end": 1,
+    "capacity": 6,
+    "availability": [
+      "07h00:20h00"
+    ]    
+  }],
+  "patients": [{
+    "id": 5,
+    "category": 0,
+    "load": 1,
+    "start": 2,
+    "destination": 0,
+    "end": 2,
+    "rdvTime": "10h43",
+    "rdvDuration": "00h23",
+    "srvDuration": "00h03"
+  }],
+  "distMatrix": [
+    [
+      0,
+      5,
+      5
+    ],
+    [
+      5,
+      0,
+      5
+    ],
+    [
+      5,
+      5,
+      0
+    ]
+  ]
+}

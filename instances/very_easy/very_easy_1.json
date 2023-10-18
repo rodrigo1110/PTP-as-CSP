@@ -1,0 +1,88 @@
+{
+    "maxWaitTime": "00h30",
+    "sameVehicleBackward": false,
+    "places": [
+        {
+            "id": 0,
+            "category": 0
+        },
+        {
+            "id": 1,
+            "category": 1
+        },
+        {
+            "id": 2,
+            "category": 1
+        },
+        {
+            "id": 3,
+            "category": 2
+        }
+    ],
+    "patients": [
+        {
+            "id": 4,
+            "start": -1,
+            "destination": 0,
+            "end": 3,
+            "category": 1,
+            "load": 1,
+            "rdvTime": "13h56",
+            "rdvDuration": "02h09",
+            "srvDuration": "00h03"
+        }
+    ],
+    "vehicles": [
+        {
+            "id": 5,
+            "canTake": [
+                0,
+                1
+            ],
+            "start": 1,
+            "end": 1,
+            "capacity": 4,
+            "availability": [
+                "07h00:20h00"
+            ]
+        },
+        {
+            "id": 6,
+            "canTake": [
+                2
+            ],
+            "start": 2,
+            "end": 2,
+            "capacity": 4,
+            "availability": [
+                "07h00:20h00"
+            ]
+        }
+    ],
+    "distMatrix": [
+        [
+            0,
+            12,
+            10,
+            10
+        ],
+        [
+            12,
+            0,
+            9,
+            9
+        ],
+        [
+            10,
+            9,
+            0,
+            14
+        ],
+        [
+            10,
+            9,
+            14,
+            0
+        ]
+    ]
+}
