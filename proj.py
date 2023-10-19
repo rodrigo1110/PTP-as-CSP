@@ -56,7 +56,9 @@ def convert_str_to_mins(timestr):
 def convert_mins_to_str(mins):
     hours = mins//60
     minutes = mins%60
-    return str(hours) + 'h' + str(minutes)
+    return "{:02d}".format(hours) + 'h' + "{:02d}".format(minutes)
+
+
 
 def get_next_ordered_vehicle_patient(vehiclePatients, minTime):
     nextSmallestTime, nextSmallestIndex = 0, -1
@@ -70,9 +72,33 @@ def sort_vehicle_patients_chronologically(vehiclePatients, vehiclePatientsStartT
     return [x for _, x in sorted(zip(vehiclePatientsStartTimes,vehiclePatients))]
 
 
-def result_to_output(result):
+
+def obtain_return_trips_after_wait(first_origin):
+    return_trips, trip_patients = [], []
+    for k in range(len(patientsWaiting)):
+        if(len(return_trips) == 0):
+            trip_origin = first_origin
+        else:
+            trip_origin = return_trips[k-1].destination
+        i = patientsWaiting[k]
+        trip_destination = activity_ends[i]
+        trip_arrivalTime = convert_mins_to_str(activity_end_time[i] + srvDurations[i]) #Or just activity_end_time[i]? Same issue as line before last.
+        for j in range(k,len(patientsWaiting)):
+            trip_patients.append(patientIDs[patientsWaiting[j]]) 
+        return_trips.append(Trip(trip_origin,trip_destination,trip_arrivalTime,trip_patients))
+        trip_patients = []
+   
+    return return_trips
+    
+
+
+
+
+
+
+def result_to_trips(result):
     global requestsSatisfied, activity_start_time, activity_duration, activity_end_time, activity_vehicle, activity_completed
-    global activity_starts, activity_ends, srvDurations, patientIDs
+    global activity_starts, activity_ends, srvDurations, patientIDs, patientsWaiting
     
     requestsSatisfied = result['objective']
     activity_start_time = result['activity_start']
@@ -85,24 +111,30 @@ def result_to_output(result):
     activity_ends = pat_destinations + pat_ends
     srvDurations = pat_srvDurations + pat_srvDurations
     patientIDs = pat_ids + pat_ids
+    patientsWaiting = []
+
+    countWaiting = 0
 
     trip_origin, trip_destination, trip_arrivalTime = -1,-1,-1
     trip_patients = []
-    trips = [[]]
+    trips = []
 
     for i in range(num_vehicles):
+        trips.append([])
         vehicle = veh_ids[i]
         vehiclePatients, vehiclePatientsStartTimes = [], []
-        for j in range(num_activities):
-            if activity_vehicle[j] == vehicle and activity_completed[i] and activity_starts[i] != -1 and activity_ends[i] != -1: #Get patients picked-up by vehicle
+        for j in range(num_activities): #Get valid patients picked-up by vehicle
+            if activity_vehicle[j] == vehicle and activity_completed[j] and activity_starts[j] != -1 and activity_ends[j] != -1: 
                 vehiclePatients.append(j)
                 vehiclePatientsStartTimes.append(activity_start_time[j])
 
         if len(vehiclePatients) == 0:
-            print("This vehicle (" , vehicle, ") doesn't transport any patient")
+            #print("This vehicle (" , vehicle, ") doesn't transport any patient")
             continue
+        
         vehiclesPatientsSorted = sort_vehicle_patients_chronologically(vehiclePatients,vehiclePatientsStartTimes)
-        print(vehiclesPatientsSorted)
+        #print(vehiclesPatientsSorted)
+        
         #first trip from depot to first patient
         trip_origin = veh_starts[i]
         trip_destination = activity_starts[vehiclesPatientsSorted[0]]
@@ -111,21 +143,70 @@ def result_to_output(result):
         trips[i].append(Trip(trip_origin,trip_destination,trip_arrivalTime,trip_patients))
        
         for k in range(len(vehiclesPatientsSorted)): #Generate trips associated to vehicle in chronological order
-            n = vehiclesPatientsSorted[k]
+            n = vehiclesPatientsSorted[k] #Current patient index
+            n_before = 0
+            if k != len(vehiclesPatientsSorted) - 1: 
+                n_after = vehiclesPatientsSorted[k+1] #Following patient index
+            if k != 0:
+                n_before = vehiclesPatientsSorted[k-1]
             trip_origin = trips[i][-1].destination 
 
             #Heading to hospital/patient's home                                                                    #only add srvDurations in arrivalTime because it ruins case when vehicle is on last patient and others
             if activity_end_time[n] - activity_start_time[n] == distMatrix[activity_starts[n]][activity_ends[n]]: #+ srvDurations[n]: #Careful: srv not reflected in activity endtimes of minizinc yet (if not meant to then remove srvDurations[i] and only add it in arrival)
-                trip_destination = activity_ends[i]
-                trip_arrivalTime = convert_mins_to_str(activity_end_time[i] + pat_srvDurations[i]) #Or just activity_end_time[i]? Same issue as line before last.
+                trip_destination = activity_ends[n]
+                trip_arrivalTime = convert_mins_to_str(activity_end_time[n] + srvDurations[n]) #Or just activity_end_time[i]? Same issue as line before last.
                 if len(trips[i][-1].patients) == 0: #Transport first patient
-                    trip_patients = [patientIDs[vehiclesPatientsSorted[k]]]
+                    trip_patients = [patientIDs[n]]
                 else:
-                    #trip_patients = trips[i][-1].patients
-                    trip_patients = trips[i][-1].patients + [patientIDs[n]]
+                    if(patientIDs[n] in trips[i][-1].patients):
+                        trip_patients = trips[i][-1].patients
+                    else:
+                        trip_patients = trips[i][-1].patients + [patientIDs[n]]
+                    if(n_before > num_patients and trip_origin == activity_ends[n_before]):
+                        trip_patients.remove(patientIDs[n_before])
+
+                trips[i].append(Trip(trip_origin,trip_destination,trip_arrivalTime,trip_patients))
+                #print("if", n)   
+            #Picking up a patient at different location
+            elif (k != len(vehiclesPatientsSorted) - 1 and 
+            activity_start_time[n_after] == activity_start_time[n] + distMatrix[trip_origin][activity_starts[n_after]] + srvDurations[n] 
+            and trip_origin != activity_starts[n_after]):
+
+                trip_destination = activity_starts[n_after]
+                trip_arrivalTime = convert_mins_to_str(activity_start_time[n_after])
+                if len(trips[i][-1].patients) == 0: #Transport first patient
+                    trip_patients = [patientIDs[n]] 
+                else:
+                    if(patientIDs[n] in trips[i][-1].patients):
+                        trip_patients = trips[i][-1].patients
+                    else:
+                        trip_patients = trips[i][-1].patients + [patientIDs[n]] 
+                    if(n_before > num_patients and trip_origin == activity_ends[n_before]):
+                        trip_patients.remove(patientIDs[n_before])
                     
                 trips[i].append(Trip(trip_origin,trip_destination,trip_arrivalTime,trip_patients))
-            else: #Heading to pickup next patient or to return depot
+                #print("elif", n)
+
+            #Still need to add check for situation when patient dropped at hospital and vehicle continues (tricky - can be more than one unlike house dropoff)
+
+            #Wait at hospital
+            else:
+                #print("Here", n)
+                if len(patientsWaiting) != 0:
+                    first = patientsWaiting[0]              #if not last patient to wait for                                                                                            #Should be just srv of n
+                if len(patientsWaiting) == 0 or activity_end_time[first] - activity_start_time[n] != distMatrix[trip_origin][activity_ends[first]] + srvDurations[first] + srvDurations[n]:
+                    countWaiting = countWaiting + 1
+                    patientsWaiting.append(n)
+                else:
+                #    print("Here2")
+                    patientsWaiting.append(n)
+                    return_trips = obtain_return_trips_after_wait(trip_origin)
+                    patientsWaiting = []
+                    trips[i] = trips[i] + return_trips
+
+
+            '''
+            else: #Heading to pickup next patient 
                 #Need way to find out what is the next patient it picks up (probably just cycle through activity start array for a possible match)
                 if(k == len(vehiclesPatientsSorted)-1):
                     print("Wasn't supposed to enter here (should be last patient's return trip)")
@@ -135,10 +216,17 @@ def result_to_output(result):
                     trip_arrivalTime = convert_mins_to_str(activity_start_time[vehiclesPatientsSorted[k+1]])
                     if len(trips[i][-1].patients) == 0: #Transport first patient
                         trip_patients = [patientIDs[vehiclesPatientsSorted[k]]] #WRONG - gotta add patient we're going to pickup in trips[i][k+1].patients
+                    #elif loc_categories[trip_origin] == 0: #coming from a hospital to pickup patient
+                    #    trip_patients = trips[i][-1].patients
+                    #    for patient in trips[i][-1].patients:
+                    #        if activity_end_time[patient] < activity_end_time[n]
                     else:
-                        trip_patients = trips[i][-1].patients + [patientIDs[n]] #WRONG - gotta add patient we're going to pickup in trips[i][k+1].patients
+                        if(patientIDs[n] in trips[i][-1].patients):
+                            trip_patients = trips[i][-1].patients
+                        else:
+                            trip_patients = trips[i][-1].patients + [patientIDs[n]] #WRONG - gotta add patient we're going to pickup in trips[i][k+1].patients
                 trips[i].append(Trip(trip_origin,trip_destination,trip_arrivalTime,trip_patients))        
-                    
+            '''      
             #TODO: add cases where vehicle reaches hospital and drops patients (patient list = [] if it doesnt stand there just waiting for them)   
             #TODO: add trip where vehicle returns to depot after first availability period and starts from depot at beginning of second one
             '''
@@ -156,62 +244,43 @@ def result_to_output(result):
         #Trip to return to depot
         trip_origin = trips[i][-1].destination
         trip_destination = veh_ends[i]
-        #trip_arrivalTime = convert_mins_to_str(trips[i][-1].arrivalTime + distMatrix[trip_origin][veh_ends[i]])
+        trip_arrivalTime = convert_mins_to_str(convert_str_to_mins(trips[i][-1].arrivalTime) + distMatrix[trip_origin][veh_ends[i]] + srvDurations[n])
         trip_patients = []
         trips[i].append(Trip(trip_origin,trip_destination,trip_arrivalTime,trip_patients)) 
-        for trip in trips[i]:
-            print(trip.origin, trip.destination, trip.arrivalTime, trip.patients)
+        #for trip in trips[i]:
+        #   print(trip.origin, trip.destination, trip.arrivalTime, trip.patients)
+
+    return trips
         
 
-    '''
-    for i in range(num_activities): #Doesnt keep things in chronological order
-        if activity_completed[i] and activity_starts[i] != -1 and activity_ends[i] != -1:
-            vehicle_index = activity_vehicle[i] - first_vehicle_id
-            if len(trips[vehicle_index]) == 0:
-                trip_origin = veh_starts[vehicle_index]
-            else:
-                trip_origin = trips[vehicle_index][-1].destination 
-
-            #if activity_start_time[i] + distMatrix[activity_starts[i]][activity_ends[i]] == activity_duration[i] + pat_srvDurations[i]: #Heading to hospital/patient's home
-            if activity_end_time[i] - activity_start_time[i] == distMatrix[activity_starts[i]][activity_ends[i]] + srvDurations[i] #Careful: srv not reflected in activity endtimes of minizinc yet (if not meant to then remove srvDurations[i] and only add it in arrival)
-                trip_destination = activity_ends[i]
-                trip_arrivalTime = activity_end_time[i] + pat_srvDurations[i] #Or just activity_end_time[i]? Same issue as line before last.
-                trip_patients.append(patientIDs[i])
-            else: #Heading to pickup another patient or to return depot
-                #Need way to find out what is the next patient it picks up (probably just cycle through activity start array for a possible match)
-                for j in range(num_activities):
-                    if activity_vehicle[j] == activity_vehicle[i]:
-                        if activity_start_time[j] == activity_start_time[i] + distMatrix[trip_origin][activity_starts[j]] + srvDurations[j]:
-                            trip_destination = activity_starts[j]
-                            trip_arrivalTime = activity_start_time[j]
-                            trip_patients.append(patientIDs[j])
-                            break
-                if(veh_availabilities_end[1] - distMatrix[trip_origin][veh_ends[vehicle_id]]): #heading to return depot
-                    trip_destination = veh_ends[vehicle_index]
-                    trip_arrivalTime = activitity_start_time[i] + distMatrix[trip_origin][veh_ends[vehicle_index]]
-                    trip_patients = []
-    '''        
 
 
+def trips_to_output(outputFile, trips, requestsSatisfied):
+    
+    output_dict = {"requests": requestsSatisfied}
+    vehicles_list, trip_list = [], []
+    for i in range(len(trips)):
+        vehicle_dict = {}
+        vehicle_dict = {'id': veh_ids[i]} 
+        for trip in trips[i]:
+            trip_dict = {}
+            trip_dict["origin"] = trip.origin
+            trip_dict["destination"] = trip.destination
+            trip_dict["arrival"] = trip.arrivalTime
+            trip_dict["patients"] = trip.patients
+            trip_list.append(trip_dict)
+        vehicle_dict["trips"] = trip_list
+        vehicles_list.append(vehicle_dict)
+        trip_list = []
 
+    output_dict['vehicles'] = vehicles_list
 
-
-
-
+    json_object = json.dumps(output_dict, indent = 1)
+    with open(outputFile, 'w') as file:
+        file.write(json_object)
+    
     
 
-'''
-def reduce_solution_space():
-    for i in range num_patients:
-        if not activity_completed[i]:
-            del activity_start[i]
-            del activity_start[i + num_patients]
-            del activity_duration[i]
-            del activity_end[i]
-            del activity_vehicle[i]
-            del activity_completed[i]
-
-'''
 
 
 
@@ -357,12 +426,17 @@ def main():
 
     initialize_model(input_data, ptpInstance)
 
-    
-    
+
     result = ptpInstance.solve()
+    if(len(result) == 0):
+        with open(sys.argv[2], 'w') as file:
+            json.dump(["No solution found"], file)
+        exit()
+    #print(result)
     
-    print(result)
-    result_to_output(result)
+    trips = result_to_trips(result)
+    trips_to_output(sys.argv[2],trips,result['objective'])
+
     '''
     print(result['activity_start'][0:30])
     print(result['activity_start'][30:60])

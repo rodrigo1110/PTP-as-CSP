@@ -62,7 +62,7 @@ function int: patientIndex(int : activity_patient_index) =
   if activity_patient_index > num_patients then activity_patient_index - num_patients else activity_patient_index endif
 ;
 function var int: vehicleIndex(var int : activity_vehicle) =
-  activity_vehicle - num_locations + 1
+  if patient_id[1] > activity_vehicle then activity_vehicle - num_locations + 1 else activity_vehicle - num_locations - num_patients + 1 endif
 ;
 
 %Missing in every constraint an option to put activity_completed[i] == false if all conditions fail.
@@ -70,7 +70,7 @@ function var int: vehicleIndex(var int : activity_vehicle) =
 %Add domain restriction to limit duration from zero to MaxWaitTime?
 
 %Domain constraints
-constraint forall(i in 1..num_activities)( %remove from here and add as a condition in forward and backward activity constraints
+constraint forall(i in 1..num_activities)( 
   if activity_start_location[i] == -1 \/ activity_end_location[i] == -1 then 
     activity_completed[i] == true /\ activity_start[i] == -1 /\ activity_end[i] == -1 /\ activity_vehicle[i] == -1 /\ activity_duration[i] == 0
   else activity_vehicle[i] in array2set(vehicle_id) /\ activity_start[i] >= 0 /\ activity_start[i] < 1440 /\ 
@@ -201,7 +201,7 @@ constraint forall(i in 1..num_patients)( %Vehicle availability - Forward activit
 );*/
 
 
-constraint forall(i in 1..num_vehicles)(%Cumulative resource - (Not sure if it makes sense)(Come after or before inter-activity constraints?)
+constraint forall(i in 1..num_vehicles)(%Cumulative resource - (Come after or before inter-activity constraints?)(Remove activities where pat_start/end = -1 or if status==fals?
   %if (i <= num_patients /\ patient_start_location[patientIndex(i)] != -1) \/ (i > num_patients /\ patient_end_location[patientIndex(i)] != -1) then
     let{
       array[1..num_activities] of int : patientLoads = patient_load ++ patient_load
