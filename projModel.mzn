@@ -54,7 +54,6 @@ array[1..num_activities] of var int: activity_vehicle;
 array[1..num_activities] of var bool: activity_completed;
 
 var int: maximumRequestsObjective = sum(i in 1..num_patients)(activity_completed[i] == true /\ activity_completed[i+num_patients] == true);
-%array[1..num_activities,1..num_locations] of var int: activity_locations;
 
 %array[1..num_patients] of var int: requests;
 
@@ -66,42 +65,47 @@ function var int: vehicleIndex(var int : activity_vehicle) =
   activity_vehicle - num_locations + 1
 ;
 
+%Missing in every constraint an option to put activity_completed[i] == false if all conditions fail.
+%Correct vehicleIndex function because sometimes vehicles come after patients (very_easy_1)
+%Add domain restriction to limit duration from zero to MaxWaitTime?
 
-%Invalid values constraints
+%Domain constraints
 constraint forall(i in 1..num_activities)( %remove from here and add as a condition in forward and backward activity constraints
-  if (i <= num_patients /\ patient_start_location[patientIndex(i)] == -1) \/ (i > num_patients /\ patient_end_location[patientIndex(i)] == -1) then 
-  activity_completed[i] == true /\ activity_start[i] == -1 /\ activity_end[i] == -1 /\ activity_vehicle[i] == -1
-  else activity_start[i]!=-1 /\ activity_end[i] != -1 /\ activity_vehicle[i] != -1
+  if activity_start_location[i] == -1 \/ activity_end_location[i] == -1 then 
+    activity_completed[i] == true /\ activity_start[i] == -1 /\ activity_end[i] == -1 /\ activity_vehicle[i] == -1 /\ activity_duration[i] == 0
+  else activity_vehicle[i] in array2set(vehicle_id) /\ activity_start[i] >= 0 /\ activity_start[i] < 1440 /\ 
+    activity_end[i] > activity_start[i] /\ activity_duration[i] == activity_end[i] - activity_start[i] /\ activity_duration[i] < maxWaitTime
+  %/\ activity_start[i]!=-1 /\ activity_end[i] != -1 /\ activity_vehicle[i] != -1
   endif
 );
 
-
-%Domain constraints
+/*
 constraint forall(i in 1..num_activities)( %General time boundaries (Maybe condense in Logical time period constraints).
   activity_start[i] >= -1 /\ activity_start[i] < 1440 /\ (activity_end[i] == -1 \/ activity_end[i] > 0) /\ activity_end[i] <= 1440 /\ activity_end[i] >= activity_start[i]
-);
+);*/
 constraint forall(i in 1..num_patients)( %Logical time period - Forward activities
-  %let{
-  %  var int: patientIndex = activity_patient[i] - num_vehicles - num_locations + 1;
-  %} in
-    if patient_start_location[i]!=-1 then
-      activity_start[i] <= (rdvTime[i] - maxWaitTime) /\ 
-      activity_end[i] <= (rdvTime[i] - maxWaitTime) endif
+  if patient_start_location[i]!=-1 then
+    %activity_start[i] <= (rdvTime[i] - distMatrix[patient_start_location[i]+1, patient_destination[i]+1] - srvDuration[i]) /\ 
+    %activity_end[i] >= (rdvTime[i] - maxWaitTime) /\ activity_end[i] <= rdvTime[i] endif
+    activity_start[i] >= rdvTime[i] - maxWaitTime /\
+    activity_end [i] <= rdvTime[i] endif
 );
 constraint forall(i in 1..num_patients)( %Logical time period - Backward activities
   if patient_end_location[i] != -1 then
-    activity_start[i+num_patients] >= (rdvTime[i] + rdvDuration[i] + maxWaitTime) /\  
-    activity_end[i+num_patients] >= (rdvTime[i] + rdvDuration[i] + maxWaitTime) endif
+    %activity_start[i+num_patients] >= (rdvTime[i] + rdvDuration[i]) /\  activity_start[i+num_patients] <= (rdvTime[i] + rdvDuration[i] + maxWaitTime) /\
+    %activity_end[i+num_patients] >= (rdvTime[i] + rdvDuration[i] + distMatrix[patient_destination[i]+1, patient_end_location[i]+1]) endif
+    activity_start[i+num_patients] >= rdvTime[i] + rdvDuration[i] /\
+    activity_end[i+num_patients] <= rdvTime[i] + rdvDuration[i] + maxWaitTime endif
 );    
 
 %Add restriction that if vehicle in position i of activities, then it has to have satisfied the corresponding request(front or back) of patient i.
-
+/*
 constraint forall(i in 1..num_activities)( %Valid duration
   activity_duration[i] == activity_end[i] - activity_start[i]
 );
 constraint forall(i in 1..num_activities)( %Valid vehicle ids
   activity_vehicle[i] in array2set(vehicle_id) \/ activity_vehicle[i] == -1 %/\ activity_patient[i] in array2set(patient_id)
-);
+);*/
 /*constraint forall(i,j in 1..num_activities)( %Logical valid duration (Necessary or just use intra-activity time travel consistency?)
   let{
     var int: patientIndex = activity_patient[i] - num_vehicles - num_locations + 1;
@@ -116,32 +120,154 @@ constraint forall(i in 1..num_activities)( %Valid vehicle ids
   endif
 );*/
 
-
-/*constraint forall(i in 1..num_activities, j in 1..num_locations)( %Valid location ids
-  activity_locations[i,j] in array2set(location_id) %/\ all_different(activity_locations[i,..])
-);*/
 /*constraint forall(i in 1..num_activities)( %Valid number of patient participations
   count(activity_patient, activity_patient[i]) <= 2
 );*/
 
 
 %Correctness constraints
+/*
 constraint forall(i in 1..num_patients)( %Forward and backward activity must be both completed
   if patient_start_location[i] != -1 /\ patient_end_location[i] != -1 then activity_completed[i] == true /\ activity_completed[i+num_patients] == true
   else activity_completed[i] == true \/ activity_completed[i+num_patients] == true  endif
-);
+);*/
 constraint forall(i in 1..num_patients)( %Forward and backward activity status must be equal
   if patient_start_location[i] != -1 /\ patient_end_location[i] != -1 then activity_completed[i] == activity_completed[i+num_patients] endif
 );
 
 
-%Inter-acivity time travel consistency constraints
+
+%Other constraints
+constraint forall(i in 1..num_patients)( %Intra-Activity time travel consistency - Forward Activities
+   if patient_start_location[i] != -1 then activity_duration[i] >= distMatrix[patient_start_location[i]+1, patient_destination[i]+1] endif
+);
+constraint forall(i in 1..num_patients)( %Intra-Activity time travel consistency - Backward Activities
+  if patient_end_location[i] != -1 then activity_duration[i+num_patients] >= distMatrix[patient_destination[i]+1, patient_end_location[i]+1] endif
+);
+
+constraint if sameVehicleBackward then %Same vehicle forward/backward
+  forall(i in 1..num_patients)(
+    if patient_start_location[i] != -1 /\ patient_end_location[i] != -1 then activity_vehicle[i] == activity_vehicle[i+num_patients] \/ activity_completed[i] == false
+    endif
+  )
+  endif;
+
+constraint forall(i in 1..num_activities)( %canTake constraint (cheat - assume max n of categories is 3
+  let {
+    int: patientIndex = patientIndex(i);
+    var int: vehicleIndex = vehicleIndex(activity_vehicle[i]);
+  } in
+  if activity_start_location[i] != -1 /\ activity_end_location[i] != -1 then
+    vehicle_canTake[vehicleIndex,1] == patient_category[patientIndex] \/ 
+    vehicle_canTake[vehicleIndex,2] == patient_category[patientIndex] \/
+    vehicle_canTake[vehicleIndex,3] == patient_category[patientIndex]
+  endif
+  %count(vehicle_canTake[vehicleIndex(activity_vehicle[i]),..], patient_category[patientIndex(i)]) == 1 
+  %patient_category[patientIndex(i)] in array2set(vehicle_canTake[vehicleIndex(activity_vehicle[i]),..])
+);
+
+
+constraint forall(i in 1..num_activities)( %Vehicle availability - Forward activities(start)(cheat - assume max availability periods is 2) (Missing end check for forward)
+  let{
+    var int: vehicleIndex = vehicleIndex(activity_vehicle[i]);
+    /*var int: vehicleDeslocationStart = if vehicle_start_location[vehicleIndex]!=-1 then distMatrix[vehicle_start_location[vehicleIndex]+1, activity_start_location[i]+1] else 0 endif;
+    var int: vehicleDeslocationEnd = if vehicle_end_location[vehicleIndex]!=-1 then distMatrix[activity_end_location[i]+1, vehicle_end_location[vehicleIndex]+1] else 0 endif;*/
+  } in
+  if activity_start_location[i] != -1 /\ activity_end_location[i] != -1 then
+    (activity_start[i] >= vehicle_availability_start[vehicleIndex, 1] + distMatrix[vehicle_start_location[vehicleIndex]+1, activity_start_location[i]+1]  /\
+    activity_end[i] <= vehicle_availability_end[vehicleIndex, 1] - distMatrix[activity_end_location[i]+1, vehicle_end_location[vehicleIndex]+1])  \/  
+    (activity_start[i] >= vehicle_availability_start[vehicleIndex, 2] + distMatrix[vehicle_start_location[vehicleIndex]+1, activity_start_location[i]+1] /\
+    activity_end[i] <= vehicle_availability_end[vehicleIndex, 2] - distMatrix[activity_end_location[i]+1, vehicle_end_location[vehicleIndex]+1])  
+    \/ activity_completed[i] == false %Keep or remove based on test score (assumption in google docs should be true and make this line pointless - (counter custom4 test
+  endif
+);
+  /*if patient_start_location[i] != -1 then 
+    if vehicle_start_location[vehicleIndex]!=-1 then
+      activity_start[i] >= vehicle_availability_start[vehicleIndex, 1] + distMatrix[vehicle_start_location[vehicleIndex]+1, patient_start_location[i]+1] \/
+      activity_start[i] >= vehicle_availability_start[vehicleIndex, 2] + distMatrix[vehicle_start_location[vehicleIndex]+1, patient_start_location[i]+1]
+    else activity_start[i] >= vehicle_availability_start[vehicleIndex, 1] \/ activity_start[i] >= vehicle_availability_start[vehicleIndex, 2] endif
+  endif*/
+/*
+constraint forall(i in 1..num_patients)( %Vehicle availability - Forward activities(end) (working but very slow) (Missing same two for backward activities.
+  let{
+    var int: vehicleIndex = vehicleIndex(activity_vehicle[i]);
+  } in
+  if patient_end_location[i] != -1 then 
+    if vehicle_end_location[vehicleIndex]!=-1 then
+      activity_end[i] <= vehicle_availability_end[vehicleIndex, 1] - distMatrix[patient_destination[i]+1, vehicle_end_location[vehicleIndex]+1] \/
+      activity_end[i] <= vehicle_availability_end[vehicleIndex, 2] - distMatrix[patient_destination[i]+1, vehicle_end_location[vehicleIndex]+1]
+    else activity_end[i] <= vehicle_availability_end[vehicleIndex, 1] \/ activity_end[i] >= vehicle_availability_end[vehicleIndex, 2] endif
+  endif
+);*/
+
+
+constraint forall(i in 1..num_vehicles)(%Cumulative resource - (Not sure if it makes sense)(Come after or before inter-activity constraints?)
+  %if (i <= num_patients /\ patient_start_location[patientIndex(i)] != -1) \/ (i > num_patients /\ patient_end_location[patientIndex(i)] != -1) then
+    let{
+      array[1..num_activities] of int : patientLoads = patient_load ++ patient_load
+    } in 
+    cumulative( %Cumulative resource
+      activity_start, 
+      activity_duration, 
+      patientLoads,
+      vehicle_capacity[i])
+  %endif
+);
+
+
+%Inter-acivity time travel consistency constraints 
 constraint forall(i,j in 1..num_activities where i!=j)( %No start overlap
   let {
     int: patientIndexI = patientIndex(i);
     int: patientIndexJ = patientIndex(j);
   } in
-  if activity_vehicle[i] == activity_vehicle[j] then
+  if activity_start_location[i] != -1 /\ activity_end_location[i] != -1 /\ activity_start_location[j] != -1 /\ activity_end_location[j] != -1 then
+    %if activity_vehicle[i] == activity_vehicle[j] then
+      %(activity_vehicle[i] == activity_vehicle[j] /\ 
+      (activity_start[j] - activity_start[i] >= distMatrix[activity_start_location[i]+1, activity_start_location[j]+1] + srvDuration[patientIndexI] \/ 
+      activity_start[i] - activity_start[j] >= distMatrix[activity_start_location[j]+1, activity_start_location[i]+1] + srvDuration[patientIndexJ]) \/ 
+      activity_vehicle[i] != activity_vehicle[j] \/ activity_completed[i] == false \/ activity_completed[j] == false
+      
+      %activity_vehicle[i] != activity_vehicle[j] \/ 
+    endif
+  %endif
+);
+constraint forall(i,j in 1..num_activities where i!=j)( %No end overlap
+  let {
+    int: patientIndexI = patientIndex(i);
+    int: patientIndexJ = patientIndex(j);
+  } in
+  if activity_start_location[i] != -1 /\ activity_end_location[i] != -1 /\ activity_start_location[j] != -1 /\ activity_end_location[j] != -1 then
+      (activity_end[j] - activity_end[i] >= distMatrix[activity_end_location[i]+1, activity_end_location[j]+1] + srvDuration[patientIndexJ] \/ 
+      activity_end[i] - activity_end[j] >= distMatrix[activity_end_location[j]+1, activity_end_location[i]+1] + srvDuration[patientIndexI]) \/ 
+      activity_vehicle[i] != activity_vehicle[j] \/ activity_completed[i] == false \/ activity_completed[j] == false
+  endif
+);
+constraint forall(i,j in 1..num_activities where i!=j)( %Min travel time
+  let {
+    int: patientIndexI = patientIndex(i);
+    int: patientIndexJ = patientIndex(j);
+  } in
+  if activity_start_location[i] != -1 /\ activity_end_location[i] != -1 /\ activity_start_location[j] != -1 /\ activity_end_location[j] != -1 then
+      (activity_start[j] - activity_end[i] >= distMatrix[activity_end_location[i]+1, activity_start_location[j]+1]  \/ 
+      activity_end[i] - activity_start[j] >= distMatrix[activity_start_location[j]+1, activity_end_location[i]+1] + srvDuration[patientIndexJ] + srvDuration[patientIndexI]) \/ 
+      activity_vehicle[i] != activity_vehicle[j] \/ activity_completed[i] == false \/ activity_completed[j] == false
+  endif
+);
+constraint forall(i,j in 1..num_activities where i!=j)( %Min travel time 
+  let {
+    int: patientIndexI = patientIndex(i);
+    int: patientIndexJ = patientIndex(j);
+  } in
+  if activity_start_location[i] != -1 /\ activity_end_location[i] != -1 /\ activity_start_location[j] != -1 /\ activity_end_location[j] != -1 then
+      (activity_end[j] - activity_start[i] >= distMatrix[activity_start_location[i]+1, activity_end_location[j]+1] + srvDuration[patientIndexI] + srvDuration[patientIndexJ]) \/ 
+      activity_start[i] - activity_end[j] >= distMatrix[activity_end_location[j]+1, activity_start_location[i]+1]  \/ 
+      activity_vehicle[i] != activity_vehicle[j] \/ activity_completed[i] == false \/ activity_completed[j] == false
+  endif
+);
+
+
+/*    
     if i <= num_patients /\ j <= num_patients /\ patient_start_location[patientIndexI] != -1 /\ patient_start_location[patientIndexJ] != -1 then %Ai and Aj forward activities
       activity_start[j] - activity_start[i] >= distMatrix[patient_start_location[patientIndexI]+1, patient_start_location[patientIndexJ]+1] + srvDuration[patientIndexI] \/
       activity_start[i] - activity_start[j] >= distMatrix[patient_start_location[patientIndexJ]+1, patient_start_location[patientIndexI]+1] + srvDuration[patientIndexJ]
@@ -157,9 +283,9 @@ constraint forall(i,j in 1..num_activities where i!=j)( %No start overlap
     else if i > num_patients /\ j > num_patients /\ patient_end_location[patientIndexI] !=- 1 /\ patient_end_location[patientIndexJ] != -1 then %Ai backward Aj backward
       activity_start[j] - activity_start[i] >= distMatrix[patient_destination[patientIndexI]+1, patient_destination[patientIndexJ]+1] + srvDuration[patientIndexI] \/
       activity_start[i] - activity_start[j] >= distMatrix[patient_destination[patientIndexJ]+1, patient_destination[patientIndexI]+1] + srvDuration[patientIndexJ]  
-   endif endif endif endif
-  endif
-);
+   endif endif endif endif */
+  %endif  
+%);
 
 
 /*constraint forall(i,j in 1..num_activities where i<j)( %Inter-activity time travel consistency - start time need to control i and j values for check to only be done once
@@ -173,69 +299,6 @@ constraint forall(i,j in 1..num_activities where i!=j)( %No start overlap
   \/ activity_start[i] - activity_start[j] >= (distMatrix[activityOrigin_j,activityOrigin_i] + srvDuration[activityPatient_j]) endif 
   
 );*/
-
-%Other constraints
-constraint forall(i in 1..num_patients)( %Intra-Activity time travel consistency - Forward Activities
-   if patient_start_location[i] != -1 then activity_duration[i] >= distMatrix[patient_start_location[i]+1, patient_destination[i]+1] endif
-);
-constraint forall(i in 1..num_patients)( %Intra-Activity time travel consistency - Backward Activities
-  if patient_end_location[i] != -1 then activity_duration[i+num_patients] >= distMatrix[patient_destination[i]+1, patient_end_location[i]+1] endif
-);
-
-constraint if sameVehicleBackward then %Same vehicle forward/backward
-  forall(i in 1..num_patients)(
-    if patient_start_location[i] != -1 /\ patient_end_location[i] != -1 then activity_vehicle[i] == activity_vehicle[i+num_patients]
-    endif
-  )
-  endif;
-  
-constraint forall(i in 1..num_activities)( %canTake constraint (cheat - assume max n of categories is 3
-  if (i <= num_patients /\ patient_start_location[patientIndex(i)] != -1) \/ (i > num_patients /\ patient_end_location[patientIndex(i)] != -1) then
-    vehicle_canTake[vehicleIndex(activity_vehicle[i]),1] == patient_category[patientIndex(i)] \/ 
-    vehicle_canTake[vehicleIndex(activity_vehicle[i]),2] == patient_category[patientIndex(i)] \/
-    vehicle_canTake[vehicleIndex(activity_vehicle[i]),3] == patient_category[patientIndex(i)]
-  endif
-  %count(vehicle_canTake[vehicleIndex(activity_vehicle[i]),..], patient_category[patientIndex(i)]) == 1 
-  %patient_category[patientIndex(i)] in array2set(vehicle_canTake[vehicleIndex(activity_vehicle[i]),..])
-);
-
-constraint forall(i in 1..num_vehicles)(%Cumulative resource - (Not sure if it makes sense)
-  %if (i <= num_patients /\ patient_start_location[patientIndex(i)] != -1) \/ (i > num_patients /\ patient_end_location[patientIndex(i)] != -1) then
-    let{
-      array[1..num_activities] of int : patientLoads = patient_load ++ patient_load
-    } in 
-    cumulative( %Cumulative resource
-      activity_start, 
-      activity_duration, 
-      patientLoads,
-      vehicle_capacity[i])
-  %endif
-);
-
-
-constraint forall(i in 1..num_patients)( %Vehicle availability - Forward activities(start)(cheat - assume max availability periods is 2) (Missing end check for forward)
-  let{
-    var int: vehicleIndex = vehicleIndex(activity_vehicle[i])
-  } in
-  if patient_start_location[i] != -1 then 
-    if vehicle_start_location[vehicleIndex]!=-1 then
-      activity_start[i] >= vehicle_availability_start[vehicleIndex, 1] + distMatrix[vehicle_start_location[vehicleIndex]+1, patient_start_location[i]+1] \/
-      activity_start[i] >= vehicle_availability_start[vehicleIndex, 2] + distMatrix[vehicle_start_location[vehicleIndex]+1, patient_start_location[i]+1]
-    else activity_start[i] >= vehicle_availability_start[vehicleIndex, 1] \/ activity_start[i] >= vehicle_availability_start[vehicleIndex, 2] endif
-  endif
-);
-constraint forall(i in 1..num_patients)( %Vehicle availability - Forward activities(end) (working but very slow) (Missing same two for backward activities.
-  let{
-    var int: vehicleIndex = vehicleIndex(activity_vehicle[i])
-  } in
-  if patient_start_location[i] != -1 then 
-    if vehicle_end_location[vehicleIndex]!=-1 then
-      activity_end[i] <= vehicle_availability_end[vehicleIndex, 1] - distMatrix[patient_destination[i]+1, vehicle_end_location[vehicleIndex]+1] \/
-      activity_end[i] <= vehicle_availability_end[vehicleIndex, 2] - distMatrix[patient_destination[i]+1, vehicle_end_location[vehicleIndex]+1]
-    else activity_end[i] <= vehicle_availability_end[vehicleIndex, 1] \/ activity_end[i] >= vehicle_availability_end[vehicleIndex, 2] endif
-  endif
-);
-
 
 
 /*
